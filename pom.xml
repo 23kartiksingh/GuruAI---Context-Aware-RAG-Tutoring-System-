@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ─────────────────────────────────────────────────────────────────────
+         Spring Boot 4.1.0 Parent  |  Java 25  |  GuruAI Microservices
+    ───────────────────────────────────────────────────────────────────────── -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.guruai</groupId>
+    <artifactId>guruai-microservices</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>GuruAI Microservices</name>
+    <description>
+        Context-Aware Adaptive Tutoring System
+        — Java Spring Boot 4.1 · Spring AI · Kafka · Redis · pgvector · Docker
+    </description>
+
+    <!-- ── All Modules ───────────────────────────────────────────────────── -->
+    <modules>
+<!--        <module>common-lib</module>-->
+        <module>api-gateway</module>
+<!--        <module>auth-service</module>-->
+<!--        <module>document-service</module>-->
+<!--        <module>study-agent-service</module>-->
+<!--        <module>knowledge-service</module>-->
+<!--        <module>quiz-service</module>-->
+<!--        <module>flashcard-service</module>-->
+<!--        <module>user-memory-service</module>-->
+<!--        <module>notification-service</module>-->
+    </modules>
+
+    <!-- ── Global Properties ─────────────────────────────────────────────── -->
+    <properties>
+        <!-- Java -->
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- Spring AI — compatible with Spring Boot 4.x / Spring Framework 7.x -->
+        <spring-ai.version>2.0.0</spring-ai.version>
+
+        <!-- Spring Cloud — for API Gateway (Spring Cloud Gateway) -->
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
+
+        <!-- JWT -->
+        <jjwt.version>0.12.6</jjwt.version>
+
+        <!-- Apache Tika — PDF / DOCX / TXT parsing -->
+        <tika.version>2.9.2</tika.version>
+
+        <!-- Testcontainers — integration tests with real DBs -->
+        <testcontainers.version>1.20.4</testcontainers.version>
+
+        <!-- Lombok -->
+        <lombok.version>1.18.34</lombok.version>
+    </properties>
+
+    <!-- ── Dependency Management (BOM imports + shared deps) ─────────────── -->
+    <dependencyManagement>
+        <dependencies>
+
+            <!-- Spring AI BOM — manages all spring-ai-* versions -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Cloud BOM — manages Spring Cloud Gateway etc. -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Testcontainers BOM -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ── Internal ── -->
+            <dependency>
+                <groupId>com.guruai</groupId>
+                <artifactId>common-lib</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- ── JWT ── -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+
+            <!-- ── Apache Tika — document parsing ── -->
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parsers-standard-package</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- ── Common dependencies for ALL services ─────────────────────────── -->
+    <dependencies>
+        <!-- Lombok — boilerplate reduction (available to all) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing base — available to all modules -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- ── Build Configuration ───────────────────────────────────────────── -->
+    <build>
+        <pluginManagement>
+            <plugins>
+
+                <!-- Spring Boot Maven Plugin — builds fat JARs for services -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+
+                <!-- Maven Compiler — Java 25 with preview features -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <release>25</release>
+                        <compilerArgs>
+                            <!-- Enable Java 25 preview features if needed -->
+                            <arg>--enable-preview</arg>
+                        </compilerArgs>
+                    </configuration>
+                </plugin>
+
+                <!-- Surefire — run preview-enabled tests -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <argLine>--enable-preview</argLine>
+                    </configuration>
+                </plugin>
+
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <!-- ── Spring Milestone/Snapshot repos (for Spring AI / Spring Cloud) ── -->
+    <repositories>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>spring-snapshots</id>
+            <name>Spring Snapshots</name>
+            <url>https://repo.spring.io/snapshot</url>
+            <releases><enabled>false</enabled></releases>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+</project>
