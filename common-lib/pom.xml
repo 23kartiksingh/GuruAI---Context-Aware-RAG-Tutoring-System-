@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.guruai</groupId>
+        <artifactId>guruai-microservices</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>common-lib</artifactId>
+    <packaging>jar</packaging>
+    <name>GuruAI Common Library</name>
+    <description>
+        Shared DTOs, Kafka event records, enums, and exceptions
+        used by all GuruAI microservices.
+    </description>
+
+    <dependencies>
+        <!-- Jackson — for JSON serialization of event records -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- Spring Web — for ResponseEntity / HttpStatus used in ApiResponse,
+             and OncePerRequestFilter used by InternalAccessFilter -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+
+        <!-- Spring Context — OncePerRequestFilter's base class implements
+             EnvironmentAware from this module; without it, compiling
+             InternalAccessFilter fails with "cannot access EnvironmentAware" -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Spring Boot core — @ConfigurationProperties used by
+             InternalAccessProperties -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot</artifactId>
+        </dependency>
+
+        <!-- Validation -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+
+        <!-- Servlet API — only needed to compile InternalAccessFilter (a
+             jakarta.servlet.Filter). "provided" because common-lib itself
+             never runs in a servlet container; every service that actually
+             uses the filter already supplies the real implementation via
+             spring-boot-starter-web (Tomcat). -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Disable spring-boot-maven-plugin for library module -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
