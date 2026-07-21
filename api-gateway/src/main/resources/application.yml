@@ -1,0 +1,155 @@
+# ================================================================
+# API Gateway — Base Configuration
+# ================================================================
+# Entry point for the entire GuruAI system.
+# Port: 8080
+#
+# Two things every route relies on:
+#   1. JwtAuthenticationFilter (a GlobalFilter, not listed per-route here)
+#      runs on every request and rejects anything without a valid access
+#      token, except the public-path allowlist below.
+#   2. The RequestRateLimiter default-filter applies to every route too,
+#      backed by Redis (see spring.data.redis below).
+# ================================================================
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:guruai_redis_2026}
+      connect-timeout: 3000ms
+      timeout: 3000ms
+
+  cloud:
+    # Spring Cloud's startup check refuses to run on Boot versions newer than
+    # the ones it formally lists (it knows 4.0.x, we run 4.1.0). It's a
+    # declared-version checklist, not a functional test — the 2025.1 train
+    # is the Boot 4 generation and works fine on 4.1 — so we disable it
+    # rather than downgrade Boot.
+    compatibility-verifier:
+      enabled: false
+
+    gateway:
+      # NOTE: everything lives under gateway.server.webflux.* — that's the
+      # property namespace for the Spring Cloud 2025.1+ / Boot 4 generation
+      # of the gateway (the old spring.cloud.gateway.* keys are deprecated
+      # aliases that only work via a migration shim).
+      server:
+        webflux:
+          # Streaming responses (study-agent-service's SSE chat endpoint) stay
+          # open far longer than a typical REST call — the default response
+          # timeout would otherwise cut the stream off mid-answer.
+          httpclient:
+            connect-timeout: 5000
+            response-timeout: 5m
+
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                # Login/logout/refresh all rely on httpOnly cookies, and browsers
+                # refuse credentialed cross-origin requests (`credentials: "include"`)
+                # against a wildcard origin — allowCredentials + allowedOrigins:"*"
+                # together is not just discouraged, it's actively rejected by the
+                # browser. So this has to be a concrete origin, not "*".
+                # FRONTEND_URL defaults to where Vite's dev server runs.
+                allowedOriginPatterns: "${FRONTEND_URL:http://localhost:3000}"
+                allowCredentials: true
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders: "*"
+
+          # Applied to every route below — token-bucket rate limiting via Redis.
+          # replenishRate: steady-state requests/sec allowed per key.
+          # burstCapacity: bucket size, i.e. how bursty traffic can be.
+          # key-resolver: see RateLimiterConfig — per-user if authenticated, else per-IP.
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
+
+          routes:
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/auth/**
+            - id: document-service
+              uri: ${DOCUMENT_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/documents/**
+            - id: study-agent-service
+              uri: ${STUDY_AGENT_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/sessions/**, /chat/**
+            - id: knowledge-service
+              uri: ${KNOWLEDGE_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/knowledge/**
+            - id: quiz-service
+              uri: ${QUIZ_SERVICE_URL:http://localhost:8086}
+              predicates:
+                - Path=/quizzes/**
+            - id: flashcard-service
+              uri: ${FLASHCARD_SERVICE_URL:http://localhost:8087}
+              predicates:
+                - Path=/flashcards/**
+            - id: user-memory-service
+              uri: ${MEMORY_SERVICE_URL:http://localhost:8088}
+              predicates:
+                - Path=/memory/**
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8090}
+              predicates:
+                - Path=/notifications/**
+            # WebSocket needs its OWN route with a ws:// scheme. Spring Cloud
+            # Gateway picks which routing filter handles a request purely from
+            # the route's URI scheme: NettyRoutingFilter matches http/https,
+            # WebsocketRoutingFilter matches ws/wss. A plain http:// route will
+            # NOT be upgraded automatically even if the client sends an
+            # `Upgrade: websocket` header — so /ws/** needs this separate route
+            # even though it's the same backend as notification-service above.
+            - id: notification-service-ws
+              uri: ${NOTIFICATION_SERVICE_WS_URL:ws://localhost:8090}
+              predicates:
+                - Path=/ws/**
+
+# Endpoints reachable WITHOUT a JWT — see JwtAuthenticationFilter.
+# Everything else requires a valid, non-blacklisted access token.
+guruai:
+  jwt:
+    secret: ${JWT_SECRET}
+  internal:
+    # Stamped on every proxied request so downstream services' InternalAccessFilter
+    # can tell it actually came through this gateway. Must match every
+    # service's own guruai.internal.secret exactly.
+    secret: ${INTERNAL_SERVICE_SECRET}
+  gateway:
+    public-paths:
+      - /auth/register
+      - /auth/login
+      - /auth/refresh
+      - /actuator/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    reactor.netty.http.client: INFO
+    com.guruai.gateway: INFO
