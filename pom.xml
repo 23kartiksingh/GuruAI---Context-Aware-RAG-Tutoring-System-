@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <!-- ─────────────────────────────────────────────────────────────────────
-         Spring Boot 4.1.0 Parent  |  Java 25  |  GuruAI Microservices
+         Spring Boot 4.1.0 Parent  |  Java 21  |  GuruAI Microservices
     ───────────────────────────────────────────────────────────────────────── -->
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -43,16 +43,20 @@
     <!-- ── Global Properties ─────────────────────────────────────────────── -->
     <properties>
         <!-- Java -->
-        <java.version>25</java.version>
-        <maven.compiler.release>25</maven.compiler.release>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- Spring AI — compatible with Spring Boot 4.x / Spring Framework 7.x -->
         <spring-ai.version>2.0.0</spring-ai.version>
 
-        <!-- Spring Cloud — for API Gateway (Spring Cloud Gateway) -->
-        <spring-cloud.version>2025.0.0</spring-cloud.version>
+        <!-- Spring Cloud — for API Gateway (Spring Cloud Gateway).
+             MUST be the 2025.1+ train: 2025.0.x targets Spring Boot 3.5 and
+             dies on Boot 4 at startup with
+             ClassNotFoundException: o.s.boot.autoconfigure.web.ServerProperties
+             (Boot 4 relocated that class). -->
+        <spring-cloud.version>2025.1.1</spring-cloud.version>
 
         <!-- JWT -->
         <jjwt.version>0.12.6</jjwt.version>
@@ -64,7 +68,7 @@
         <testcontainers.version>1.20.4</testcontainers.version>
 
         <!-- Lombok -->
-        <lombok.version>1.18.34</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <!-- ── Dependency Management (BOM imports + shared deps) ─────────────── -->
@@ -175,16 +179,19 @@
                     </configuration>
                 </plugin>
 
-                <!-- Maven Compiler — Java 25 with preview features -->
+                <!-- Maven Compiler — Java 21 (LTS) -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <configuration>
-                        <release>25</release>
-                        <compilerArgs>
-                            <!-- Enable Java 25 preview features if needed -->
-                            <arg>--enable-preview</arg>
-                        </compilerArgs>
+                        <release>21</release>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
 
@@ -193,7 +200,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration>
-                        <argLine>--enable-preview</argLine>
                     </configuration>
                 </plugin>
 

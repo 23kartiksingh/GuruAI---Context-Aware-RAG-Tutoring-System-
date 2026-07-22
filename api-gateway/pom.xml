@@ -14,31 +14,37 @@
     <artifactId>api-gateway</artifactId>
     <name>GuruAI API Gateway</name>
     <description>
-        Single entry point for all GuruAI services.
-        Spring Cloud Gateway — JWT validation, rate limiting (Redis), routing, CORS.
+        Spring Cloud Gateway. Routes external traffic to backend microservices.
         Port: 8080
     </description>
 
     <dependencies>
-        <!-- Spring Cloud Gateway (reactive, uses Netty — NOT spring-boot-starter-web) -->
+        <!-- Spring Cloud Gateway (reactive/WebFlux server variant — the old
+             `spring-cloud-starter-gateway` name is the deprecated alias) -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-gateway</artifactId>
+            <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
         </dependency>
 
-        <!-- Redis — for rate limiting (RequestRateLimiter filter) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
-        </dependency>
-
-        <!-- Actuator — health + info endpoints -->
+        <!-- Actuator for health checks -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- JWT — for validating tokens in the gateway filter -->
+        <!-- Reactive Redis — backs both the RequestRateLimiter filter (Spring
+             Cloud Gateway's built-in Redis token-bucket limiter) and our own
+             JWT blacklist check. Gateway is WebFlux/reactive end-to-end, so
+             this must be the *reactive* Redis starter, not the blocking one
+             auth-service uses. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- JWT — validates access tokens issued by auth-service. Same
+             library/version as auth-service so both sides agree on the
+             token format. -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -54,10 +60,25 @@
             <scope>runtime</scope>
         </dependency>
 
-<!--        &lt;!&ndash; Common library &ndash;&gt;-->
-<!--        <dependency>-->
-<!--            <groupId>com.guruai</groupId>-->
-<!--            <artifactId>common-lib</artifactId>-->
-<!--        </dependency>-->
+        <!-- Common — shared ApiResponse envelope for error bodies -->
+        <dependency>
+            <groupId>com.guruai</groupId>
+            <artifactId>common-lib</artifactId>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Repackages the jar as an executable Spring Boot fat jar
+                 (Main-Class manifest + bundled dependencies). Without this
+                 declaration the root pom's pluginManagement entry is config
+                 only — the plugin never runs, the jar stays a plain library
+                 jar, and `java -jar app.jar` dies with "no main manifest
+                 attribute". Every runnable service module needs this. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>
