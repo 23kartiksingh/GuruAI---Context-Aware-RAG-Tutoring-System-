@@ -1,23 +1,14 @@
 package com.guruai.gateway;
 
+import com.guruai.common.security.InternalAccessProperties;
+import com.guruai.gateway.config.GatewaySecurityProperties;
+import com.guruai.gateway.config.JwtProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
-/**
- * GuruAI API Gateway — Port 8080
- *
- * <p>Single entry point for all client traffic.
- * Routes requests to the appropriate microservice after JWT validation.
- *
- * <p>Package structure:
- * <pre>
- * config/       — Gateway routes, JWT filter, rate limiter config
- * filter/       — GlobalJwtAuthFilter (extends AbstractGatewayFilterFactory)
- * exception/    — GlobalExceptionHandler for gateway-level errors
- * util/         — JwtUtil (token validation, no issuance — that's Auth Service)
- * </pre>
- */
 @SpringBootApplication
+@EnableConfigurationProperties({JwtProperties.class, GatewaySecurityProperties.class, InternalAccessProperties.class})
 public class ApiGatewayApplication {
 
     public static void main(String[] args) {
