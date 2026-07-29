@@ -31,4 +31,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * @return {@code true} if the username exists
      */
     boolean existsByUsername(String username);
+
+    /**
+     * Find a user previously created/linked via an OAuth2 provider.
+     *
+     * @param authProvider e.g. {@code "GOOGLE"}
+     * @param providerId   the provider's stable subject id (Google's {@code sub} claim)
+     * @return an {@link Optional} containing the user, or empty on first-ever login
+     */
+    Optional<User> findByAuthProviderAndProviderId(String authProvider, String providerId);
 }
