@@ -1,0 +1,103 @@
+# ================================================================
+# Auth Service — Base Configuration
+# ================================================================
+# Active profile set by environment: local | docker
+# Override values in application-local.yml / application-docker.yml
+# ================================================================
+
+server:
+  port: 8081
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: auth-service
+
+  # Build the DispatcherServlet during startup rather than lazily on the first
+  # request. Spring's default defers it, which made the very first call to each
+  # service stall ~20s while the servlet bootstrapped — long enough that the UI
+  # looked frozen. Doing it at boot moves that cost into startup, where it's
+  # expected.
+  mvc:
+    servlet:
+      load-on-startup: 1
+
+  # ── JPA ────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Flyway owns the schema — never let JPA modify it
+    show-sql: false
+    open-in-view: false         # Prevent LazyInitializationException in controllers
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+  # ── Flyway ─────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # ── Kafka Producer Defaults ─────────────────────────────────
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false   # smaller messages, consumers use explicit types
+    listener:
+      missing-topics-fatal: false
+
+  # ── Redis ───────────────────────────────────────────────────
+  data:
+    redis:
+      port: 6379
+      connect-timeout: 3000ms
+      timeout: 3000ms
+
+  # NOTE: no spring.security.oauth2.client.registration.* block here on
+  # purpose. Spring Boot's property-driven OAuth2 auto-configuration
+  # validates client-id/client-secret as non-blank at context startup — so
+  # if GOOGLE_OAUTH_CLIENT_ID/SECRET are unset (the out-of-the-box state),
+  # the ENTIRE service would refuse to boot. SecurityConfig builds the
+  # ClientRegistrationRepository bean itself instead, so a missing/blank
+  # credential just leaves "Sign in with Google" inert (404) rather than
+  # taking down password login/register too. See .env.example.
+
+# ── GuruAI JWT Properties ────────────────────────────────────
+guruai:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-expiry-ms: ${JWT_ACCESS_EXPIRY_MS:3600000}       # 1 hour
+    refresh-expiry-ms: ${JWT_REFRESH_EXPIRY_MS:1209600000}  # 14 days
+  cookie:
+    secure: false               # Set to true behind HTTPS in production
+  # Must match api-gateway's INTERNAL_SERVICE_SECRET — see InternalAccessFilter.
+  internal:
+    secret: ${INTERNAL_SERVICE_SECRET}
+    same-site: Lax
+  # Where OAuth2LoginSuccessHandler/FailureHandler send the browser once the
+  # Google handshake is done — the SPA, not this service. On success the
+  # cookies are already set by then, so landing on any route is enough; the
+  # SPA's AuthContext silently restores the session from them on mount.
+  oauth2:
+    success-redirect-url: ${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:3000/dashboard}
+    failure-redirect-url: ${OAUTH2_FAILURE_REDIRECT_URL:http://localhost:3000/login?error=oauth}
+
+# ── Actuator ────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.guruai.auth: INFO
+    org.springframework.security: WARN

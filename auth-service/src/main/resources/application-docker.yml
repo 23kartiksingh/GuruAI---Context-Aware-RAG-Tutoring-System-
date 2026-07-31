@@ -1,0 +1,32 @@
+# ================================================================
+# Auth Service — DOCKER Profile (docker-compose.yml)
+# ================================================================
+# All hostnames use Docker service names (not localhost).
+# Secrets injected as environment variables from .env file.
+# ================================================================
+
+spring:
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/auth_db
+    username: ${DB_USER:guruai}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+
+  data:
+    redis:
+      host: redis
+      password: ${REDIS_PASSWORD}
+
+  kafka:
+    bootstrap-servers: kafka:9092    # internal Kafka listener
+
+guruai:
+  cookie:
+    secure: false    # set to true when behind TLS termination (nginx/ALB)
+
+logging:
+  level:
+    com.guruai.auth: INFO

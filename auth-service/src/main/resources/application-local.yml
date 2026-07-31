@@ -1,0 +1,33 @@
+# ================================================================
+# Auth Service — LOCAL Profile (IDE / IntelliJ Run)
+# ================================================================
+# Use this when running the service directly from IntelliJ.
+# Requires docker-compose.infra.yml to be running first.
+#
+# Set VM args: -Dspring.profiles.active=local
+# ================================================================
+
+spring:
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: guruai
+    password: guruai_secret_2026
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 20000
+
+  data:
+    redis:
+      host: localhost
+      password: guruai_redis_2026
+
+  kafka:
+    bootstrap-servers: localhost:9094    # external Kafka listener
+
+logging:
+  level:
+    com.guruai.auth: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
