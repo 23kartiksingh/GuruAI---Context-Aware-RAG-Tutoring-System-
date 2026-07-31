@@ -31,7 +31,7 @@
         <module>common-lib</module>
         <module>api-gateway</module>
         <module>auth-service</module>
-<!--        <module>document-service</module>-->
+        <module>document-service</module>
 <!--        <module>study-agent-service</module>-->
 <!--        <module>knowledge-service</module>-->
 <!--        <module>quiz-service</module>-->
