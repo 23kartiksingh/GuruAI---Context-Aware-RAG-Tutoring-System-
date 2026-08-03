@@ -35,12 +35,29 @@ public final class KafkaTopics {
     /** Fired when a user reviews a flashcard and submits a quality score (0–5). */
     public static final String FLASHCARD_REVIEWED     = "flashcard.reviewed";
 
+    // ── Session Domain ───────────────────────────────────────────────────────
+    /**
+     * Fired when a study session is deleted. Each service owns the cleanup of
+     * its own session-scoped data: document-service drops the documents and
+     * their pgvector chunks, flashcard-service drops the generated cards, and
+     * knowledge-service drops the mastery recorded in that session.
+     */
+    public static final String SESSION_DELETED        = "session.deleted";
+
     // ── Knowledge Domain ─────────────────────────────────────────────────────
     /**
      * Fired by Knowledge Service when a topic's EMA score drops below the
      * AVERAGE threshold (0.5). Triggers a notification to the user.
      */
     public static final String MASTERY_DROPPED        = "mastery.dropped";
+
+    /**
+     * Fired periodically (every ~10 minutes, subject to a per-user cooldown)
+     * by Knowledge Service for students who still have a weak topic tracked
+     * against a live session — a recurring nudge, unlike the one-off
+     * MASTERY_DROPPED alert.
+     */
+    public static final String WEAK_TOPIC_REMINDER    = "weak.topic.reminder";
 
     // NOTE: an earlier design also had a "notification.trigger" topic for
     // notification-service to re-broadcast events internally. It was never
@@ -55,6 +72,8 @@ public final class KafkaTopics {
         CHAT_MESSAGE_SAVED,
         QUIZ_COMPLETED,
         FLASHCARD_REVIEWED,
-        MASTERY_DROPPED
+        MASTERY_DROPPED,
+        SESSION_DELETED,
+        WEAK_TOPIC_REMINDER
     };
 }
