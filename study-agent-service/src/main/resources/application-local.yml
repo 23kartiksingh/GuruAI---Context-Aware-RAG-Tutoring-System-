@@ -1,0 +1,18 @@
+# ================================================================
+# Study Agent Service — LOCAL Profile (IDE)
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/agent_db
+    username: guruai
+    password: guruai_secret_2026
+
+guruai:
+  services:
+    document-service-url: http://localhost:8082
+    memory-service-url: http://localhost:8088
+    knowledge-service-url: http://localhost:8085
+
+logging:
+  level:
+    com.guruai.agent: DEBUG

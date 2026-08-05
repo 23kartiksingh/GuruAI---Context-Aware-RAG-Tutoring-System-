@@ -1,0 +1,16 @@
+# ================================================================
+# Study Agent Service — DOCKER Profile
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/agent_db
+    username: ${DB_USER:guruai}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+guruai:
+  services:
+    document-service-url: http://document-service:8082
+    memory-service-url: http://user-memory-service:8088
+    knowledge-service-url: http://knowledge-service:8085
