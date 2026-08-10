@@ -140,6 +140,7 @@ guruai:
       - /auth/register
       - /auth/login
       - /auth/refresh
+      - /auth/oauth2/**
       - /actuator/**
 
 management:

@@ -19,7 +19,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
  *
  * controller/
  *   ├── AuthController.java       — /auth/register, /auth/login, /auth/logout, /auth/refresh
- *   └── UserController.java       — /auth/user/profile (GET/PUT), /auth/user/stats
+ *   └── UserController.java       — /auth/user/profile (GET/PUT)
  *
  * service/
  *   ├── AuthService.java          — interface
@@ -43,8 +43,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
  *   │   └── UpdateProfileRequest.java
  *   └── response/
  *       ├── AuthResponse.java     — {accessToken, userId, username}
- *       ├── UserProfileResponse.java
- *       └── UserStatsResponse.java
+ *       └── UserProfileResponse.java
  *
  * event/
  *   └── producer/

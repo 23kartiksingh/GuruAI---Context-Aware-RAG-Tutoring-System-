@@ -33,6 +33,13 @@ public enum NotificationType {
     /** Document was indexed and flashcards were auto-generated. */
     DOCUMENT_PROCESSED,
 
+    /**
+     * Periodic nudge to revisit a weak topic. Triggered by knowledge-service's
+     * scheduled check, not a one-off event like MASTERY_DROP — this can recur
+     * for the same topic (subject to a cooldown) for as long as it stays weak.
+     */
+    WEAK_TOPIC_REMINDER,
+
     /** Generic informational message. */
     INFO
 }
