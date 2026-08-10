@@ -1,0 +1,22 @@
+# ================================================================
+# Knowledge Service — LOCAL Profile (IDE)
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/knowledge_db
+    username: guruai
+    password: guruai_secret_2026
+    hikari:
+      maximum-pool-size: 5
+
+  data:
+    redis:
+      host: localhost
+      password: guruai_redis_2026
+
+  kafka:
+    bootstrap-servers: localhost:9094
+
+logging:
+  level:
+    com.guruai.knowledge: DEBUG

@@ -1,0 +1,23 @@
+# ================================================================
+# Knowledge Service — DOCKER Profile
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/knowledge_db
+    username: ${DB_USER:guruai}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+
+  data:
+    redis:
+      host: redis
+      password: ${REDIS_PASSWORD}
+
+  kafka:
+    bootstrap-servers: kafka:9092
+
+logging:
+  level:
+    com.guruai.knowledge: INFO

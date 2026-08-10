@@ -1,0 +1,100 @@
+# ================================================================
+# Knowledge Service — Base Configuration
+# ================================================================
+# Tracks student mastery via EMA (alpha=0.3).
+# Listens to: quiz.completed, flashcard.reviewed, user.registered
+# Publishes:  mastery.dropped
+# Port: 8085  |  DB: knowledge_db (PostgreSQL)
+# ================================================================
+server:
+  port: 8085
+
+spring:
+  application:
+    name: knowledge-service
+
+  # Build the DispatcherServlet during startup rather than lazily on the first
+  # request. Spring's default defers it, which made the very first call to each
+  # service stall ~20s while the servlet bootstrapped — long enough that the UI
+  # looked frozen. Doing it at boot moves that cost into startup, where it's
+  # expected.
+  mvc:
+    servlet:
+      load-on-startup: 1
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      port: 6379
+      connect-timeout: 3000ms
+      timeout: 3000ms
+
+  # ── Spring AI — Groq via OpenAI-compatible API ───────────────
+  # Used only by TopicCanonicalizerService's cheap classification call —
+  # everything else in this service is plain data/CRUD.
+  ai:
+    openai:
+      api-key: ${GROQ_API_KEY}
+      # See study-agent-service's application.yml for why "/v1" is required —
+      # without it every Groq call 404s on "/openai/chat/completions".
+      base-url: https://api.groq.com/openai/v1
+      chat:
+        options:
+          model: llama-3.1-8b-instant
+          temperature: 0.0          # deterministic — this is classification, not writing
+
+  kafka:
+    consumer:
+      group-id: knowledge-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.guruai.common.events"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      missing-topics-fatal: false
+
+# ── GuruAI Knowledge Properties ─────────────────────────────────
+guruai:
+  # Must match api-gateway's INTERNAL_SERVICE_SECRET — see InternalAccessFilter.
+  internal:
+    secret: ${INTERNAL_SERVICE_SECRET}
+  mastery:
+    ema-alpha: 0.3             # EMA smoothing factor (ported from Python tracker.py)
+    weak-threshold: 0.4        # score < 0.4 → WEAK
+    strong-threshold: 0.7      # score >= 0.7 → STRONG
+    # WeakTopicReminderScheduler — how often the check RUNS, not how often a
+    # given student gets notified (that's bounded by reminder-cooldown-hours
+    # below, via a Redis key, so the same weak topic doesn't renotify every
+    # single check for as long as it stays weak).
+    reminder-interval-ms: 600000     # 10 minutes
+    reminder-cooldown-hours: 4       # min gap between reminders for one student
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.guruai.knowledge: INFO
+    org.springframework.kafka: WARN
