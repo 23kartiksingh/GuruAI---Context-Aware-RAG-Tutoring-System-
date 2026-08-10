@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Dark surface palette, kept as plain CSS variables so a colour is changed
+   in one place. Components reference the hex values directly via Tailwind
+   arbitrary values (e.g. bg-[#121215]); these vars back the base styles
+   below.
+
+   NOTE: written as plain CSS rather than Tailwind's @apply — v4 dropped the
+   bare `bg-[--var]` shorthand, and `@apply bg-[--color-ink-950]` compiles to
+   invalid `background-color:--color-ink-950` (no var() wrapper), which
+   silently left the page background white. */
+:root {
+  --ink-950: #0a0a0c;
+  --ink-900: #121215;
+  --ink-800: #17171c;
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--ink-950);
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Slim scrollbars — default light chrome looks wrong on dark surfaces. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2c2c35;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a45;
+}
