@@ -1,0 +1,460 @@
+# ================================================================
+# GuruAI — Full System Docker Compose
+# ================================================================
+# Starts infrastructure + all 9 backend microservices + the React frontend.
+# Use this for integration testing / staging.
+# For development, prefer: docker-compose.infra.yml + run services in IDE.
+#
+# Usage:
+#   docker-compose up -d --build
+#   docker-compose down
+#   docker-compose logs -f study-agent-service
+# ================================================================
+
+# Reuse all infrastructure services from infra file
+include:
+  - docker-compose.infra.yml
+
+services:
+
+  # ════════════════════════════════════════════════════════════
+  # API GATEWAY — Single entry point :8080
+  # ════════════════════════════════════════════════════════════
+  api-gateway:
+    build:
+      # Context is the repo root (not ./api-gateway) so the Dockerfile's
+      # Maven build can see the whole multi-module reactor (root pom.xml +
+      # common-lib + every service). Same pattern for every service below.
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: guruai-api-gateway
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    ports:
+      - "8080:8080"
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:     docker
+      JWT_SECRET:                 ${JWT_SECRET}
+      INTERNAL_SERVICE_SECRET:    ${INTERNAL_SERVICE_SECRET}
+      FRONTEND_URL:                ${FRONTEND_URL:-http://localhost:3000}
+      # Show WHICH health component is up/down instead of just the aggregate —
+      # a bare {"status":"DOWN"} is useless for diagnosis. Fine to leave on
+      # for a dev/demo stack.
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:    always
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_COMPONENTS: always
+      REDIS_HOST:                 redis
+      REDIS_PORT:                 6379
+      REDIS_PASSWORD:             ${REDIS_PASSWORD:-guruai_redis_2026}
+      # Route targets — MUST be Docker service names, not localhost, or every
+      # route falls back to application.yml's `http://localhost:PORT`
+      # defaults and tries to reach the gateway container itself.
+      AUTH_SERVICE_URL:            http://auth-service:8081
+      DOCUMENT_SERVICE_URL:        http://document-service:8082
+      STUDY_AGENT_SERVICE_URL:     http://study-agent-service:8083
+      KNOWLEDGE_SERVICE_URL:       http://knowledge-service:8085
+      QUIZ_SERVICE_URL:            http://quiz-service:8086
+      FLASHCARD_SERVICE_URL:       http://flashcard-service:8087
+      MEMORY_SERVICE_URL:          http://user-memory-service:8088
+      NOTIFICATION_SERVICE_URL:    http://notification-service:8090
+      NOTIFICATION_SERVICE_WS_URL: ws://notification-service:8090
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # AUTH SERVICE :8081
+  # ════════════════════════════════════════════════════════════
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: guruai-auth-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # No published host port on purpose: this service is only meant to be
+    # reached through api-gateway (:8080), which is the only container
+    # below with a "ports:" mapping. Every other service is reachable from
+    # OTHER CONTAINERS on guruai-network (that's how routing/Kafka/DB
+    # access still works) but not from the host machine directly — closing
+    # off the "bypass the gateway and forge X-User-Id" loophole at the
+    # network level, on top of InternalAccessFilter's application-level
+    # check. For local debugging, use `docker compose exec` or temporarily
+    # add a ports: block back.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:     docker
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-guruai_secret_2026}
+      # NOTE: application-docker.yml reads the Redis password from a
+      # container env var literally named REDIS_PASSWORD (via ${REDIS_PASSWORD}),
+      # not through Spring's SPRING_* relaxed-binding convention — the host
+      # itself is hard-coded to "redis" in that same file. So this must be
+      # named exactly REDIS_PASSWORD, not SPRING_REDIS_PASSWORD (which would
+      # silently be ignored and leave the app trying to connect with no
+      # password against a Redis instance that requires one).
+      REDIS_PASSWORD:              ${REDIS_PASSWORD:-guruai_redis_2026}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET:                 ${JWT_SECRET}
+      JWT_ACCESS_EXPIRY_MS:       ${JWT_ACCESS_EXPIRY_MS:-3600000}
+      JWT_REFRESH_EXPIRY_MS:      ${JWT_REFRESH_EXPIRY_MS:-1209600000}
+      INTERNAL_SERVICE_SECRET:    ${INTERNAL_SERVICE_SECRET}
+      # "Sign in with Google" — leave the client id/secret blank to leave the
+      # feature dormant (the button will just 401 from Google, nothing else
+      # breaks). See .env.example for how to create these.
+      GOOGLE_OAUTH_CLIENT_ID:      ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET:  ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Public gateway origin the BROWSER redirects through — must match a
+      # URI registered in the Google Cloud Console byte-for-byte.
+      OAUTH2_REDIRECT_BASE_URL:    ${OAUTH2_REDIRECT_BASE_URL:-http://localhost:8080}
+      # Where the browser lands after the Google handshake finishes.
+      OAUTH2_SUCCESS_REDIRECT_URL: ${OAUTH2_SUCCESS_REDIRECT_URL:-${FRONTEND_URL:-http://localhost:3000}/dashboard}
+      OAUTH2_FAILURE_REDIRECT_URL: ${OAUTH2_FAILURE_REDIRECT_URL:-${FRONTEND_URL:-http://localhost:3000}/login?error=oauth}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # DOCUMENT SERVICE :8082
+  # ════════════════════════════════════════════════════════════
+  document-service:
+    build:
+      context: .
+      dockerfile: document-service/Dockerfile
+    container_name: guruai-document-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    # document-service gets a bigger ceiling than its siblings: it's the
+    # only service running Apache Tika (PDF/OCR parsing is notoriously
+    # memory-hungry) alongside two Spring AI clients (chat + embedding)
+    # and pgvector. The shared 512m/256MB-heap default that's fine for
+    # quiz/flashcard/memory caused a real "OutOfMemoryError: Java heap
+    # space" here mid-upload — 256m simply isn't enough headroom once
+    # Tika is actually parsing a file instead of just sitting idle.
+    mem_limit: 896m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 896m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx600m -Xss512k -XX:MaxMetaspaceSize=200m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/document_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      # See auth-service block above for why this is REDIS_PASSWORD, not
+      # SPRING_REDIS_PASSWORD (application-docker.yml reads it verbatim).
+      REDIS_PASSWORD:                ${REDIS_PASSWORD:-guruai_redis_2026}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # AI provider — Gemini ONLY (embeddings + topic extraction).
+      # Part of the free-tier load split: Gemini = indexing-time AI here,
+      # Groq = conversation-time AI in study-agent/quiz/flashcard/memory.
+      GOOGLE_API_KEY:                ${GOOGLE_API_KEY}
+      # pgvector — gemini-embedding-001 produces 768-dim vectors
+      SPRING_AI_VECTORSTORE_PGVECTOR_INDEX_TYPE:       HNSW
+      SPRING_AI_VECTORSTORE_PGVECTOR_DISTANCE_TYPE:    COSINE_DISTANCE
+      SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS:       768
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # STUDY AGENT SERVICE :8083 — AI Brain
+  # (absorbed the old chat-service + learning-path-service during
+  # the 11 -> 9 service consolidation, see root README)
+  # ════════════════════════════════════════════════════════════
+  study-agent-service:
+    build:
+      context: .
+      dockerfile: study-agent-service/Dockerfile
+    container_name: guruai-study-agent
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      # AI provider — Groq only (chat, CRAG grading, learning paths).
+      # Query embeddings happen inside document-service (Gemini), reached
+      # over HTTP — this service holds no Google key.
+      GROQ_API_KEY:                  ${GROQ_API_KEY}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Internal service URLs (HTTP calls to sibling services). These names
+      # must match what application.yml actually reads: ${DOCUMENT_SERVICE_URL},
+      # ${MEMORY_SERVICE_URL}, ${KNOWLEDGE_SERVICE_URL}. (The old
+      # GURUAI_SERVICES_* names here were never read by anything — the app
+      # only worked in Docker because the yml defaults happened to use
+      # docker service hostnames.)
+      DOCUMENT_SERVICE_URL:          http://document-service:8082
+      KNOWLEDGE_SERVICE_URL:         http://knowledge-service:8085
+      MEMORY_SERVICE_URL:            http://user-memory-service:8088
+      # This service OWNS agent_db (sessions + messages). It does NOT connect
+      # to document_db directly — pgvector search happens over HTTP via
+      # document-service. (An earlier version of this file pointed the
+      # datasource at document_db, which would have silently broken Flyway
+      # and session persistence — the env var overrides application-docker.yml.)
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/agent_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      document-service:
+        condition: service_started
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # KNOWLEDGE SERVICE :8085
+  # ════════════════════════════════════════════════════════════
+  knowledge-service:
+    build:
+      context: .
+      dockerfile: knowledge-service/Dockerfile
+    container_name: guruai-knowledge-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/knowledge_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      # See auth-service block above for why this is REDIS_PASSWORD, not
+      # SPRING_REDIS_PASSWORD (application-docker.yml reads it verbatim).
+      REDIS_PASSWORD:                ${REDIS_PASSWORD:-guruai_redis_2026}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Used by TopicCanonicalizerService to cumulate similarly-worded
+      # topics under one canonical name instead of fragmenting them.
+      GROQ_API_KEY:                  ${GROQ_API_KEY}
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # QUIZ SERVICE :8086
+  # ════════════════════════════════════════════════════════════
+  quiz-service:
+    build:
+      context: .
+      dockerfile: quiz-service/Dockerfile
+    container_name: guruai-quiz-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/quiz_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      # AI provider — Groq for chat (no embeddings in quiz service)
+      GROQ_API_KEY:                  ${GROQ_API_KEY}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Used to resolve "Auto" difficulty from the student's mastery.
+      KNOWLEDGE_SERVICE_URL:         http://knowledge-service:8085
+      # Used to ground quiz generation in the student's uploaded documents
+      # for a given topic, instead of generating from the topic name alone.
+      DOCUMENT_SERVICE_URL:          http://document-service:8082
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      knowledge-service:
+        condition: service_started
+      document-service:
+        condition: service_started
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # FLASHCARD SERVICE :8087
+  # ════════════════════════════════════════════════════════════
+  flashcard-service:
+    build:
+      context: .
+      dockerfile: flashcard-service/Dockerfile
+    container_name: guruai-flashcard-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/flashcard_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      # AI provider — Groq for chat (no embeddings in flashcard service)
+      GROQ_API_KEY:                  ${GROQ_API_KEY}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # USER MEMORY SERVICE :8088
+  # ════════════════════════════════════════════════════════════
+  user-memory-service:
+    build:
+      context: .
+      dockerfile: user-memory-service/Dockerfile
+    container_name: guruai-memory-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # See auth-service block above for why there's no ports: mapping here.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/memory_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      # AI provider — Groq for chat (no embeddings in memory service)
+      GROQ_API_KEY:                  ${GROQ_API_KEY}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # NOTIFICATION SERVICE :8090
+  # ════════════════════════════════════════════════════════════
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: guruai-notification-service
+    restart: unless-stopped
+    # Hard ceiling so 9 JVMs + infra actually fit on an 8GB laptop —
+    # without limits each JVM sizes itself as if it owns the machine,
+    # the total blows past available RAM, and Docker OOM-kills whichever
+    # container is biggest (usually right as it finishes booting).
+    mem_limit: 512m
+    # No ports: mapping for the REST API — see auth-service block above.
+    # Unlike the others, this one DOES eventually need SOME public reachability
+    # for the raw /ws/** WebSocket path once the frontend exists; that's
+    # handled by the gateway's dedicated ws:// route (see api-gateway's
+    # NOTIFICATION_SERVICE_WS_URL), not by publishing this container's port.
+    environment:
+      # Keep the JVM comfortably inside mem_limit (heap + metaspace +
+      # threads + native overhead all count against the 512m ceiling).
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:MaxMetaspaceSize=160m"
+      SPRING_PROFILES_ACTIVE:        docker
+      SPRING_DATASOURCE_URL:         jdbc:postgresql://postgres:5432/notif_db
+      SPRING_DATASOURCE_USERNAME:    ${DB_USER:-guruai}
+      SPRING_DATASOURCE_PASSWORD:    ${DB_PASSWORD:-guruai_secret_2026}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_SERVICE_SECRET:      ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - guruai-network
+
+  # ════════════════════════════════════════════════════════════
+  # REACT FRONTEND :3000
+  # ════════════════════════════════════════════════════════════
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Vite inlines VITE_* vars into the JS bundle at build time, so they
+      # have to be build args — an `environment:` block below would do
+      # nothing to an already-built static bundle. Defaults here assume
+      # the gateway is reachable at localhost:8080 from the browser (true
+      # for local dev; override at build time for other deployments).
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+        VITE_WS_BASE_URL:  ${VITE_WS_BASE_URL:-ws://localhost:8080}
+    container_name: guruai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - guruai-network

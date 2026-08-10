@@ -1,0 +1,21 @@
+# ================================================================
+# Keeps the Docker build context small and fast.
+# Each service's Dockerfile builds with the WHOLE repo as context
+# (needed so Maven can see the multi-module reactor), so this file
+# matters a lot more here than in a single-module project.
+# ================================================================
+.git/
+.idea/
+*.iml
+target/
+*/target/
+.env
+*.log
+node_modules/
+frontend/dist/
+uploads/
+faiss_index_db/
+vector_dbs/
+__pycache__/
+*.pyc
+.DS_Store

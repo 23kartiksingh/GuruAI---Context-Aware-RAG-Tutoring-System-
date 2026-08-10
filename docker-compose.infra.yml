@@ -138,11 +138,17 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092 || exit 1"]
       interval: 20s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      # Generous windows on purpose. On a loaded 8GB dev machine the broker can
+      # spend minutes replaying __consumer_offsets before it answers a --list,
+      # and the probe itself is a JVM launch (slow when CPU is contended). The
+      # old 30s start_period / 10s timeout marked Kafka unhealthy while it was
+      # merely still starting, which then blocked every service that
+      # depends_on it with "dependency failed to start".
+      timeout: 20s
+      retries: 15
+      start_period: 180s
 
-  # Kafka Topic Initializer — creates all 6 topics with correct settings
+  # Kafka Topic Initializer — creates all 8 topics with correct settings
   kafka-setup:
     image: apache/kafka:3.9.0
     container_name: guruai-kafka-setup
@@ -160,12 +166,37 @@ services:
       - |
         echo '⏳ Waiting for Kafka to be fully ready...'
         sleep 5
-        for t in user.registered document.indexed chat.message.saved quiz.completed flashcard.reviewed mastery.dropped; do
-          /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic "$$t" --partitions 3 --replication-factor 1 --if-not-exists
-          echo "✅ Topic ready: $$t"
+        TOPICS='user.registered document.indexed chat.message.saved quiz.completed flashcard.reviewed mastery.dropped session.deleted weak.topic.reminder'
+        # Retry each topic instead of assuming one attempt works. On a loaded
+        # machine createTopics can fail with "Timed out waiting for a node
+        # assignment" while the broker is still loading __consumer_offsets.
+        # The previous version printed "Topic ready" unconditionally after the
+        # command, so a timeout looked identical to success and session.deleted
+        # silently never got created.
+        for t in $$TOPICS; do
+          created=0
+          for attempt in 1 2 3 4 5; do
+            if /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 \
+                 --topic "$$t" --partitions 3 --replication-factor 1 --if-not-exists 2>&1; then
+              created=1
+              break
+            fi
+            echo "  ↻ attempt $$attempt failed for $$t, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$$created" = "1" ]; then echo "✅ Topic ready: $$t"; else echo "❌ FAILED to create: $$t"; fi
         done
-        echo '🎉 All 6 Kafka topics created!'
-        /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092
+
+        # Verify against what the broker actually reports, rather than trusting
+        # the create calls above.
+        echo '── Verifying ──'
+        ACTUAL=$$(/opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092)
+        echo "$$ACTUAL"
+        missing=0
+        for t in $$TOPICS; do
+          echo "$$ACTUAL" | grep -qx "$$t" || { echo "❌ MISSING: $$t"; missing=1; }
+        done
+        if [ "$$missing" = "0" ]; then echo '🎉 All 8 Kafka topics verified.'; else echo '⚠️  Some topics are missing — see above.'; fi
 
   # Kafka UI — web dashboard for inspecting topics and messages
   kafka-ui:
