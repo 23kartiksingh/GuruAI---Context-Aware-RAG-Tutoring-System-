@@ -1,0 +1,17 @@
+# ================================================================
+# Quiz Service — DOCKER Profile
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/quiz_db
+    username: ${DB_USER:guruai}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+  kafka:
+    bootstrap-servers: kafka:9092
+
+logging:
+  level:
+    com.guruai.quiz: INFO
