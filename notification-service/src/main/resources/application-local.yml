@@ -1,0 +1,15 @@
+# ================================================================
+# Notification Service — LOCAL Profile (IDE)
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/notif_db
+    username: guruai
+    password: guruai_secret_2026
+
+  kafka:
+    bootstrap-servers: localhost:9094
+
+logging:
+  level:
+    com.guruai.notification: DEBUG
