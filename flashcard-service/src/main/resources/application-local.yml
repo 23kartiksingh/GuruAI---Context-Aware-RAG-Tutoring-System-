@@ -1,0 +1,17 @@
+# ================================================================
+# Flashcard Service — LOCAL Profile (IDE)
+# ================================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/flashcard_db
+    username: guruai
+    password: guruai_secret_2026
+    hikari:
+      maximum-pool-size: 5
+
+  kafka:
+    bootstrap-servers: localhost:9094
+
+logging:
+  level:
+    com.guruai.flashcard: DEBUG

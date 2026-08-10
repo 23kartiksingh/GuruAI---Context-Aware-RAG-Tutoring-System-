@@ -1,0 +1,81 @@
+# ================================================================
+# Flashcard Service — Base Configuration
+# ================================================================
+# SM-2 spaced repetition + AI auto-generation from documents.
+# Listens to: document.indexed
+# Publishes:  flashcard.reviewed
+# Port: 8087  |  DB: flashcard_db (PostgreSQL)
+# ================================================================
+server:
+  port: 8087
+
+spring:
+  application:
+    name: flashcard-service
+
+  # Build the DispatcherServlet during startup rather than lazily on the first
+  # request. Spring's default defers it, which made the very first call to each
+  # service stall ~20s while the servlet bootstrapped — long enough that the UI
+  # looked frozen. Doing it at boot moves that cost into startup, where it's
+  # expected.
+  mvc:
+    servlet:
+      load-on-startup: 1
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  kafka:
+    consumer:
+      group-id: flashcard-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.guruai.common.events"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      missing-topics-fatal: false
+
+  # Groq via Spring AI OpenAI starter (for flashcard generation)
+  ai:
+    openai:
+      api-key: ${GROQ_API_KEY}
+      # See study-agent-service's application.yml for why "/v1" is required —
+      # without it every Groq call 404s on "/openai/chat/completions".
+      base-url: https://api.groq.com/openai/v1
+      chat:
+        options:
+          model: llama-3.1-8b-instant
+          temperature: 0.3
+
+# Must match api-gateway's INTERNAL_SERVICE_SECRET — see InternalAccessFilter.
+guruai:
+  internal:
+    secret: ${INTERNAL_SERVICE_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.guruai.flashcard: INFO
+    org.springframework.kafka: WARN
